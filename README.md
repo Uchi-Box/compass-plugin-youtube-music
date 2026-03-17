@@ -9,6 +9,7 @@ Standalone third-party data source plugin for Compass Music.
 ## Development
 
 ```bash
+export GITHUB_PACKAGES_TOKEN=<token-with-read:packages>
 pnpm install
 pnpm test
 pnpm build
@@ -28,3 +29,18 @@ export GITHUB_PACKAGES_TOKEN=<token-with-read-packages>
 pnpm install
 ```
 
+## CI setup
+
+This repository's CI expects a repository secret named:
+
+```text
+GITHUB_PACKAGES_TOKEN
+```
+
+That token must include:
+
+```text
+read:packages
+```
+
+Without that scope, `pnpm install` will fail when resolving the private SDK package.
