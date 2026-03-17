@@ -1,0 +1,15 @@
+{
+  "id": "com.compass.youtube-music",
+  "name": "YouTube Music",
+  "version": "0.1.0",
+  "description": "Search and play music from YouTube Music",
+  "author": "Compass Music Team",
+  "platforms": [
+    "all"
+  ],
+  "main": "dist/index.js",
+  "brandColor": "#dc322f",
+  "capabilities": {
+    "dataSource": true
+  }
+}

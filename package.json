@@ -1,0 +1,22 @@
+{
+  "name": "compass-plugin-youtube-music",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone YouTube Music data source plugin for Compass Music",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "4.0.18",
+    "@types/node": "^24.5.2"
+  }
+}
