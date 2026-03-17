@@ -133,6 +133,88 @@ describe('YouTubeMusicDataSourcePlugin', () => {
     })
   })
 
+  it('falls back to another playable candidate when the primary video is unavailable', async () => {
+    await plugin.activate(mockContext)
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          playabilityStatus: {
+            status: 'ERROR',
+            reason: 'Video unavailable'
+          }
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: () =>
+          Promise.resolve(`
+            var ytInitialData = ${JSON.stringify({
+              contents: {
+                twoColumnSearchResultsRenderer: {
+                  primaryContents: {
+                    sectionListRenderer: {
+                      contents: [
+                        {
+                          itemSectionRenderer: {
+                            contents: [
+                              {
+                                videoRenderer: {
+                                  videoId: 'abc123',
+                                  title: { runs: [{ text: 'Blocked Song' }] }
+                                }
+                              },
+                              {
+                                videoRenderer: {
+                                  videoId: 'fallback123',
+                                  title: { runs: [{ text: 'Fallback Song' }] },
+                                  ownerText: { runs: [{ text: 'Test Artist' }] },
+                                  thumbnail: { thumbnails: [{ url: 'cover.jpg' }] },
+                                  lengthText: { simpleText: '3:45' }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            })};
+          `)
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          playabilityStatus: { status: 'OK' },
+          streamingData: {
+            adaptiveFormats: [
+              {
+                mimeType: 'audio/webm; codecs="opus"',
+                url: 'https://rr.youtube.com/videoplayback?audio=fallback',
+                bitrate: 128000
+              }
+            ]
+          }
+        })
+      })
+
+    await expect(
+      plugin.resolveStream({
+        id: 'abc123',
+        title: 'Blocked Song',
+        artist: 'Test Artist',
+        source: { plugin: 'com.compass.youtube-music', externalId: 'abc123' }
+      })
+    ).resolves.toMatchObject({
+      url: 'https://rr.youtube.com/videoplayback?audio=fallback',
+      format: 'webm',
+      bitrate: 128000
+    })
+  })
+
   it('gets metadata from the player response with fallback behavior', async () => {
     await plugin.activate(mockContext)
 

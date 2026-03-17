@@ -88,6 +88,15 @@ class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
       const playerResponse = await this.client.fetchPlayer(videoId)
       return toStreamInfo(playerResponse, this.settings.preferAudioOnly)
     } catch (error) {
+      this.context?.log('warn', 'Primary YouTube video failed, trying fallback:', error)
+      const fallbackStream = await this.resolveStreamFromFallbackSearch(
+        track,
+        videoId
+      )
+      if (fallbackStream) {
+        return fallbackStream
+      }
+
       this.context?.log('error', 'Failed to resolve stream:', error)
       throw error
     }
@@ -127,6 +136,41 @@ class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
       fetch: fetchImpl,
       region: this.settings.region
     })
+  }
+
+  private async resolveStreamFromFallbackSearch(
+    track: TrackReference,
+    excludedVideoId: string
+  ): Promise<StreamInfo | null> {
+    const fallbackQuery = [track.title, track.artist].filter(Boolean).join(' ').trim()
+    if (!fallbackQuery) {
+      return null
+    }
+
+    const candidates = await this.search(fallbackQuery, { limit: 5 })
+    for (const candidate of candidates) {
+      const candidateVideoId = candidate.id
+      if (!candidateVideoId || candidateVideoId === excludedVideoId) {
+        continue
+      }
+
+      try {
+        const playerResponse = await this.client.fetchPlayer(candidateVideoId)
+        this.context?.log(
+          'info',
+          `Resolved fallback YouTube stream with candidate: ${candidateVideoId}`
+        )
+        return toStreamInfo(playerResponse, this.settings.preferAudioOnly)
+      } catch (error) {
+        this.context?.log(
+          'warn',
+          `Fallback YouTube candidate not playable: ${candidateVideoId}`,
+          error
+        )
+      }
+    }
+
+    return null
   }
 }
 
