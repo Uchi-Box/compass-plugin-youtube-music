@@ -1,4 +1,4 @@
-import type { DataSourceSearchResult } from '@uchi-box/compass-plugin-sdk'
+import type { DataSourceSearchResult } from './plugin-types'
 
 export interface YouTubeMusicSettings {
   searchLimit: number

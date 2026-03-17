@@ -1,5 +1,98 @@
-import { execFile as execFile2 } from "node:child_process";
-import { promisify } from "node:util";
+// src/index.ts
+import { execFile as execFile2 } from "child_process";
+import { promisify as promisify2 } from "util";
+
+// src/yt-dlp-binary.ts
+import { execFile } from "child_process";
+import { createWriteStream, existsSync } from "fs";
+import { chmod, mkdir, rename, stat, unlink } from "fs/promises";
+import { homedir, platform } from "os";
+import { join } from "path";
+import { promisify } from "util";
+import { pipeline } from "stream/promises";
+var execFileAsync = promisify(execFile);
+var YT_DLP_VERSION = "2025.03.15";
+var CACHE_DIR = join(homedir(), ".compass", "bin");
+var MAX_AGE_MS = 7 * 24 * 60 * 60 * 1e3;
+function getBinaryName() {
+  switch (platform()) {
+    case "win32":
+      return "yt-dlp.exe";
+    case "darwin":
+      return "yt-dlp_macos";
+    default:
+      return "yt-dlp_linux";
+  }
+}
+function getDownloadUrl() {
+  const name = getBinaryName();
+  return `https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/${name}`;
+}
+function getCachedPath() {
+  const localName = platform() === "win32" ? "yt-dlp.exe" : "yt-dlp";
+  return join(CACHE_DIR, localName);
+}
+async function isCacheFresh(filePath) {
+  try {
+    const info = await stat(filePath);
+    return Date.now() - info.mtimeMs < MAX_AGE_MS;
+  } catch {
+    return false;
+  }
+}
+async function downloadBinary(fetchImpl) {
+  const cachedPath = getCachedPath();
+  await mkdir(CACHE_DIR, { recursive: true });
+  const url = getDownloadUrl();
+  const tmpPath = cachedPath + ".tmp";
+  const response = await fetchImpl(url, { redirect: "follow" });
+  if (!response.ok || !response.body) {
+    throw new Error(`Failed to download yt-dlp: HTTP ${response.status}`);
+  }
+  try {
+    const fileStream = createWriteStream(tmpPath);
+    await pipeline(response.body, fileStream);
+    await rename(tmpPath, cachedPath);
+    if (platform() !== "win32") {
+      await chmod(cachedPath, 493);
+    }
+  } catch (error) {
+    try {
+      await unlink(tmpPath);
+    } catch {
+    }
+    throw error;
+  }
+  return cachedPath;
+}
+async function verifyBinary(binPath) {
+  try {
+    await execFileAsync(binPath, ["--version"], { timeout: 5e3 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function resolveYtDlpPath(fetchImpl = globalThis.fetch) {
+  const cachedPath = getCachedPath();
+  if (existsSync(cachedPath) && await isCacheFresh(cachedPath)) {
+    return cachedPath;
+  }
+  const systemCandidates = platform() === "win32" ? ["yt-dlp.exe", "yt-dlp"] : ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp", "yt-dlp"];
+  for (const candidate of systemCandidates) {
+    if (await verifyBinary(candidate)) {
+      return candidate;
+    }
+  }
+  const downloaded = await downloadBinary(fetchImpl);
+  if (await verifyBinary(downloaded)) {
+    return downloaded;
+  }
+  throw new Error(
+    "Failed to resolve yt-dlp binary. Download may have failed or binary is not executable."
+  );
+}
+
 // src/youtube-search.ts
 function buildYouTubeSearchUrl(query) {
   const searchQuery = `${query} music`;
@@ -62,7 +155,6 @@ function parseYouTubeSearchResults(html, options) {
   }
   return results;
 }
-var execFileAsync = promisify(execFile2);
 
 // src/youtube-client.ts
 var USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -109,7 +201,9 @@ var YouTubeClient = class {
         body: JSON.stringify(profile.buildBody(videoId, locale))
       });
       if (!response.ok) {
-        lastFailure = new Error(`${profile.clientName} player API failed: ${response.status}`);
+        lastFailure = new Error(
+          `${profile.clientName} player API failed: ${response.status}`
+        );
         continue;
       }
       const payload = await response.json();
@@ -172,11 +266,12 @@ var PLAYER_CLIENT_PROFILES = [
   },
   {
     endpoint: "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
-    clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
-    clientVersion: "2.0",
+    clientName: "IOS",
+    clientVersion: "19.45.4",
+    userAgent: "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X)",
     extraHeaders: {
-      "X-Youtube-Client-Name": "85",
-      "X-Youtube-Client-Version": "2.0"
+      "X-Youtube-Client-Name": "5",
+      "X-Youtube-Client-Version": "19.45.4"
     },
     buildBody: (videoId, locale) => ({
       videoId,
@@ -184,13 +279,35 @@ var PLAYER_CLIENT_PROFILES = [
       racyCheckOk: true,
       context: {
         client: {
-          clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
-          clientVersion: "2.0",
+          clientName: "IOS",
+          clientVersion: "19.45.4",
+          deviceMake: "Apple",
+          deviceModel: "iPhone16,2",
+          osName: "iPhone",
+          osVersion: "18.1.0.22B83",
+          platform: "MOBILE",
           hl: locale.hl,
           gl: locale.gl
-        },
-        thirdParty: {
-          embedUrl: "https://www.youtube.com/"
+        }
+      }
+    })
+  },
+  {
+    endpoint: "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+    clientName: "WEB",
+    clientVersion: "2.20250312.01.00",
+    extraHeaders: {
+      "X-Youtube-Client-Name": "1",
+      "X-Youtube-Client-Version": "2.20250312.01.00"
+    },
+    buildBody: (videoId, locale) => ({
+      videoId,
+      context: {
+        client: {
+          clientName: "WEB",
+          clientVersion: "2.20250312.01.00",
+          hl: locale.hl,
+          gl: locale.gl
         }
       }
     })
@@ -254,6 +371,7 @@ function toTrackMetadata(response, fallbackTitle) {
 }
 
 // src/index.ts
+var execFileAsync2 = promisify2(execFile2);
 var manifest = {
   id: "com.compass.youtube-music",
   name: "YouTube Music",
@@ -315,7 +433,10 @@ var YouTubeMusicDataSourcePlugin = class {
       return await this.resolvePlayableStream(videoId);
     } catch (error) {
       this.context?.log("warn", "Primary YouTube video failed, trying fallback:", error);
-      const fallbackStream = await this.resolveStreamFromFallbackSearch(track, videoId);
+      const fallbackStream = await this.resolveStreamFromFallbackSearch(
+        track,
+        videoId
+      );
       if (fallbackStream) {
         return fallbackStream;
       }
@@ -365,41 +486,34 @@ var YouTubeMusicDataSourcePlugin = class {
   }
   async resolveStreamWithYtDlp(videoId) {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const candidates = ["/opt/homebrew/bin/yt-dlp", "yt-dlp"];
-    let lastError = null;
-    for (const command of candidates) {
-      try {
-        const { stdout } = await execFileAsync(
-          command,
-          [
-            "--dump-single-json",
-            "--no-playlist",
-            "--no-warnings",
-            "--skip-download",
-            "-f",
-            "ba[protocol!=m3u8]/ba/bestaudio",
-            videoUrl
-          ],
-          {
-            timeout: 2e4,
-            maxBuffer: 8 * 1024 * 1024
-          }
-        );
-        const payload = JSON.parse(stdout);
-        if (!payload.url) {
-          throw new Error(`yt-dlp did not return a playable URL for ${videoId}`);
-        }
-        return {
-          url: payload.url,
-          format: payload.ext === "webm" ? "webm" : "m4a",
-          bitrate: payload.abr ? Math.round(payload.abr * 1e3) : void 0,
-          headers: payload.http_headers
-        };
-      } catch (error) {
-        lastError = error;
+    const fetchImpl = this.context?.fetch ?? globalThis.fetch;
+    const command = await resolveYtDlpPath(fetchImpl);
+    const { stdout } = await execFileAsync2(
+      command,
+      [
+        "--dump-single-json",
+        "--no-playlist",
+        "--no-warnings",
+        "--skip-download",
+        "-f",
+        "ba[protocol!=m3u8]/ba/bestaudio",
+        videoUrl
+      ],
+      {
+        timeout: 2e4,
+        maxBuffer: 8 * 1024 * 1024
       }
+    );
+    const payload = JSON.parse(stdout);
+    if (!payload.url) {
+      throw new Error(`yt-dlp did not return a playable URL for ${videoId}`);
     }
-    throw lastError instanceof Error ? lastError : new Error(`yt-dlp failed to resolve stream for ${videoId}`);
+    return {
+      url: payload.url,
+      format: payload.ext === "webm" ? "webm" : "m4a",
+      bitrate: payload.abr ? Math.round(payload.abr * 1e3) : void 0,
+      headers: payload.http_headers
+    };
   }
   async resolveStreamFromFallbackSearch(track, excludedVideoId) {
     const fallbackQuery = [track.title, track.artist].filter(Boolean).join(" ").trim();
@@ -414,10 +528,17 @@ var YouTubeMusicDataSourcePlugin = class {
       }
       try {
         const stream = await this.resolvePlayableStream(candidateVideoId);
-        this.context?.log("info", `Resolved fallback YouTube stream with candidate: ${candidateVideoId}`);
+        this.context?.log(
+          "info",
+          `Resolved fallback YouTube stream with candidate: ${candidateVideoId}`
+        );
         return stream;
       } catch (error) {
-        this.context?.log("warn", `Fallback YouTube candidate not playable: ${candidateVideoId}`, error);
+        this.context?.log(
+          "warn",
+          `Fallback YouTube candidate not playable: ${candidateVideoId}`,
+          error
+        );
       }
     }
     return null;

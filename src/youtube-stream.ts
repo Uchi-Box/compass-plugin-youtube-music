@@ -1,4 +1,4 @@
-import type { StreamInfo, TrackMetadata } from '@uchi-box/compass-plugin-sdk'
+import type { StreamInfo, TrackMetadata } from './plugin-types'
 import type {
   YouTubeAdaptiveFormat,
   YouTubePlayerResponse

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { resolveYtDlpPath } from './yt-dlp-binary'
 import type {
   DataSourcePlugin,
   DataSourceSearchResult,
@@ -11,7 +12,7 @@ import type {
   StreamInfo,
   TrackMetadata,
   TrackReference
-} from '@uchi-box/compass-plugin-sdk'
+} from './plugin-types'
 import { YouTubeClient } from './youtube-client'
 import { parseYouTubeSearchResults } from './youtube-search'
 import { toStreamInfo, toTrackMetadata } from './youtube-stream'
@@ -155,52 +156,42 @@ class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
 
   private async resolveStreamWithYtDlp(videoId: string): Promise<StreamInfo> {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`
-    const candidates = ['/opt/homebrew/bin/yt-dlp', 'yt-dlp']
-    let lastError: unknown = null
+    const fetchImpl = this.context?.fetch ?? globalThis.fetch
 
-    for (const command of candidates) {
-      try {
-        const { stdout } = await execFileAsync(
-          command,
-          [
-            '--dump-single-json',
-            '--no-playlist',
-            '--no-warnings',
-            '--skip-download',
-            '-f',
-            'ba[protocol!=m3u8]/ba/bestaudio',
-            videoUrl
-          ],
-          {
-            timeout: 20_000,
-            maxBuffer: 8 * 1024 * 1024
-          }
-        )
-        const payload = JSON.parse(stdout) as {
-          url?: string
-          ext?: string
-          abr?: number
-          http_headers?: Record<string, string>
-        }
-
-        if (!payload.url) {
-          throw new Error(`yt-dlp did not return a playable URL for ${videoId}`)
-        }
-
-        return {
-          url: payload.url,
-          format: payload.ext === 'webm' ? 'webm' : 'm4a',
-          bitrate: payload.abr ? Math.round(payload.abr * 1000) : undefined,
-          headers: payload.http_headers
-        }
-      } catch (error) {
-        lastError = error
+    const command = await resolveYtDlpPath(fetchImpl)
+    const { stdout } = await execFileAsync(
+      command,
+      [
+        '--dump-single-json',
+        '--no-playlist',
+        '--no-warnings',
+        '--skip-download',
+        '-f',
+        'ba[protocol!=m3u8]/ba/bestaudio',
+        videoUrl
+      ],
+      {
+        timeout: 20_000,
+        maxBuffer: 8 * 1024 * 1024
       }
+    )
+    const payload = JSON.parse(stdout) as {
+      url?: string
+      ext?: string
+      abr?: number
+      http_headers?: Record<string, string>
     }
 
-    throw lastError instanceof Error
-      ? lastError
-      : new Error(`yt-dlp failed to resolve stream for ${videoId}`)
+    if (!payload.url) {
+      throw new Error(`yt-dlp did not return a playable URL for ${videoId}`)
+    }
+
+    return {
+      url: payload.url,
+      format: payload.ext === 'webm' ? 'webm' : 'm4a',
+      bitrate: payload.abr ? Math.round(payload.abr * 1000) : undefined,
+      headers: payload.http_headers
+    }
   }
 
   private async resolveStreamFromFallbackSearch(

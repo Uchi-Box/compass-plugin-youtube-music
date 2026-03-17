@@ -22,6 +22,8 @@ interface TrackSource {
 interface TrackReference {
     id: string;
     source: TrackSource;
+    title?: string;
+    artist?: string;
 }
 type AudioFormat = 'mp3' | 'm4a' | 'flac' | 'ogg' | 'webm' | 'wav';
 interface StreamInfo {
@@ -106,6 +108,9 @@ declare class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginIn
     getLyrics(_track: TrackReference): Promise<Lyrics | null>;
     private refreshSettings;
     private createClient;
+    private resolvePlayableStream;
+    private resolveStreamWithYtDlp;
+    private resolveStreamFromFallbackSearch;
 }
 declare const plugin: YouTubeMusicDataSourcePlugin;
 
