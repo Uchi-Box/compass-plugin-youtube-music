@@ -136,16 +136,15 @@ describe('YouTubeMusicDataSourcePlugin', () => {
   it('falls back to another playable candidate when the primary video is unavailable', async () => {
     await plugin.activate(mockContext)
 
-    mockFetch
+    vi.spyOn(plugin as never, 'resolvePlayableStream' as never)
+      .mockRejectedValueOnce(new Error('primary not playable'))
       .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          playabilityStatus: {
-            status: 'ERROR',
-            reason: 'Video unavailable'
-          }
-        })
-      })
+        url: 'https://rr.youtube.com/videoplayback?audio=fallback',
+        format: 'webm',
+        bitrate: 128000
+      } as never)
+
+    mockFetch
       .mockResolvedValueOnce({
         ok: true,
         text: () =>
@@ -185,21 +184,6 @@ describe('YouTubeMusicDataSourcePlugin', () => {
             })};
           `)
       })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          playabilityStatus: { status: 'OK' },
-          streamingData: {
-            adaptiveFormats: [
-              {
-                mimeType: 'audio/webm; codecs="opus"',
-                url: 'https://rr.youtube.com/videoplayback?audio=fallback',
-                bitrate: 128000
-              }
-            ]
-          }
-        })
-      })
 
     await expect(
       plugin.resolveStream({
@@ -211,6 +195,55 @@ describe('YouTubeMusicDataSourcePlugin', () => {
     ).resolves.toMatchObject({
       url: 'https://rr.youtube.com/videoplayback?audio=fallback',
       format: 'webm',
+      bitrate: 128000
+    })
+  })
+
+  it('falls back to yt-dlp when player clients cannot resolve a stream', async () => {
+    await plugin.activate(mockContext)
+
+    vi.spyOn(plugin as never, 'resolveStreamWithYtDlp' as never).mockResolvedValue({
+      url: 'https://rr.youtube.com/videoplayback?audio=ytdlp',
+      format: 'm4a',
+      bitrate: 128000
+    } as never)
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          playabilityStatus: { status: 'ERROR', reason: 'Video unavailable' }
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          playabilityStatus: { status: 'ERROR', reason: 'Video unavailable' }
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          playabilityStatus: { status: 'ERROR', reason: 'Video unavailable' }
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          playabilityStatus: { status: 'UNPLAYABLE', reason: 'Video unavailable' }
+        })
+      })
+
+    await expect(
+      plugin.resolveStream({
+        id: 'blocked',
+        title: 'Blocked Song',
+        artist: 'Blocked Artist',
+        source: { plugin: 'com.compass.youtube-music', externalId: 'blocked' }
+      })
+    ).resolves.toMatchObject({
+      url: 'https://rr.youtube.com/videoplayback?audio=ytdlp',
+      format: 'm4a',
       bitrate: 128000
     })
   })

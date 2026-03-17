@@ -64,6 +64,33 @@ describe('youtube-stream', () => {
     ).toThrow('No audio streams available for this video')
   })
 
+  it('uses available audio even when playability status is not OK', () => {
+    expect(
+      toStreamInfo(
+        {
+          playabilityStatus: {
+            status: 'ERROR',
+            reason: 'Video unavailable'
+          },
+          streamingData: {
+            adaptiveFormats: [
+              {
+                mimeType: 'audio/mp4; codecs="mp4a.40.2"',
+                url: 'https://example.com/aac',
+                bitrate: 96000
+              }
+            ]
+          }
+        },
+        true
+      )
+    ).toMatchObject({
+      url: 'https://example.com/aac',
+      format: 'm4a',
+      bitrate: 96000
+    })
+  })
+
   it('extracts metadata from player response with fallback title', () => {
     expect(
       toTrackMetadata(

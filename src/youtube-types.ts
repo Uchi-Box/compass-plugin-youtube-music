@@ -73,6 +73,9 @@ export interface YouTubePlayerResponse {
       }
     }
   }
+  responseContext?: {
+    visitorData?: string
+  }
 }
 
 export interface SearchParseOptions {

@@ -1,3 +1,5 @@
+import { execFile as execFile2 } from "node:child_process";
+import { promisify } from "node:util";
 // src/youtube-search.ts
 function buildYouTubeSearchUrl(query) {
   const searchQuery = `${query} music`;
@@ -60,6 +62,7 @@ function parseYouTubeSearchResults(html, options) {
   }
   return results;
 }
+var execFileAsync = promisify(execFile2);
 
 // src/youtube-client.ts
 var USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -90,37 +93,109 @@ var YouTubeClient = class {
     }
     return response.text();
   }
-  async fetchPlayer(videoId) {
+  async fetchPlayer(videoId, options = {}) {
     const locale = resolveLocale(this.options.region);
-    const response = await this.options.fetch(
-      "https://music.youtube.com/youtubei/v1/player?prettyPrint=false",
-      {
+    let lastFailure = null;
+    for (const profile of PLAYER_CLIENT_PROFILES) {
+      const response = await this.options.fetch(profile.endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "User-Agent": USER_AGENT,
+          "User-Agent": profile.userAgent ?? USER_AGENT,
           Origin: "https://music.youtube.com",
-          Referer: "https://music.youtube.com/"
+          Referer: "https://music.youtube.com/",
+          ...profile.extraHeaders
         },
-        body: JSON.stringify({
-          videoId,
-          context: {
-            client: {
-              clientName: "WEB_REMIX",
-              clientVersion: "1.20241106.01.00",
-              hl: locale.hl,
-              gl: locale.gl
-            }
-          }
-        })
+        body: JSON.stringify(profile.buildBody(videoId, locale))
+      });
+      if (!response.ok) {
+        lastFailure = new Error(`${profile.clientName} player API failed: ${response.status}`);
+        continue;
       }
-    );
-    if (!response.ok) {
-      throw new Error(`YouTube player API failed: ${response.status}`);
+      const payload = await response.json();
+      if (payload.streamingData?.adaptiveFormats?.some((format) => !!format.url)) {
+        return payload;
+      }
+      if (!options.requirePlayable && (payload.videoDetails || payload.microformat?.playerMicroformatRenderer)) {
+        return payload;
+      }
+      if (!options.requirePlayable && payload.playabilityStatus?.status === "OK") {
+        return payload;
+      }
+      lastFailure = new Error(
+        `${profile.clientName} returned ${payload.playabilityStatus?.status ?? "UNKNOWN"}: ${payload.playabilityStatus?.reason ?? "unknown reason"}`
+      );
     }
-    return response.json();
+    throw lastFailure ?? new Error("YouTube player API failed for all clients");
   }
 };
+var PLAYER_CLIENT_PROFILES = [
+  {
+    endpoint: "https://music.youtube.com/youtubei/v1/player?prettyPrint=false",
+    clientName: "WEB_REMIX",
+    clientVersion: "1.20241106.01.00",
+    buildBody: (videoId, locale) => ({
+      videoId,
+      context: {
+        client: {
+          clientName: "WEB_REMIX",
+          clientVersion: "1.20241106.01.00",
+          hl: locale.hl,
+          gl: locale.gl
+        }
+      }
+    })
+  },
+  {
+    endpoint: "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+    clientName: "ANDROID",
+    clientVersion: "19.44.38",
+    userAgent: "com.google.android.youtube/19.44.38 (Linux; U; Android 13) gzip",
+    extraHeaders: {
+      "X-Youtube-Client-Name": "3",
+      "X-Youtube-Client-Version": "19.44.38"
+    },
+    buildBody: (videoId, locale) => ({
+      videoId,
+      contentCheckOk: true,
+      racyCheckOk: true,
+      context: {
+        client: {
+          clientName: "ANDROID",
+          clientVersion: "19.44.38",
+          androidSdkVersion: 33,
+          hl: locale.hl,
+          gl: locale.gl
+        }
+      }
+    })
+  },
+  {
+    endpoint: "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+    clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+    clientVersion: "2.0",
+    extraHeaders: {
+      "X-Youtube-Client-Name": "85",
+      "X-Youtube-Client-Version": "2.0"
+    },
+    buildBody: (videoId, locale) => ({
+      videoId,
+      contentCheckOk: true,
+      racyCheckOk: true,
+      context: {
+        client: {
+          clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+          clientVersion: "2.0",
+          hl: locale.hl,
+          gl: locale.gl
+        },
+        thirdParty: {
+          embedUrl: "https://www.youtube.com/"
+        }
+      }
+    })
+  }
+];
 
 // src/youtube-stream.ts
 function pickBestAudioFormat(formats, preferAudioOnly) {
@@ -140,29 +215,29 @@ function pickBestAudioFormat(formats, preferAudioOnly) {
   })[0];
 }
 function toStreamInfo(response, preferAudioOnly) {
+  const bestAudio = pickBestAudioFormat(
+    response.streamingData?.adaptiveFormats ?? [],
+    preferAudioOnly
+  );
+  if (bestAudio?.url) {
+    const format = bestAudio.mimeType.startsWith("audio/webm") ? "webm" : "m4a";
+    return {
+      url: bestAudio.url,
+      format,
+      bitrate: bestAudio.bitrate,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        Origin: "https://music.youtube.com",
+        Referer: "https://music.youtube.com/"
+      }
+    };
+  }
   if (response.playabilityStatus?.status !== "OK") {
     throw new Error(
       `Video not playable: ${response.playabilityStatus?.reason ?? "unknown reason"}`
     );
   }
-  const bestAudio = pickBestAudioFormat(
-    response.streamingData?.adaptiveFormats ?? [],
-    preferAudioOnly
-  );
-  if (!bestAudio?.url) {
-    throw new Error("No audio streams available for this video");
-  }
-  const format = bestAudio.mimeType.startsWith("audio/webm") ? "webm" : "m4a";
-  return {
-    url: bestAudio.url,
-    format,
-    bitrate: bestAudio.bitrate,
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-      Origin: "https://music.youtube.com",
-      Referer: "https://music.youtube.com/"
-    }
-  };
+  throw new Error("No audio streams available for this video");
 }
 function toTrackMetadata(response, fallbackTitle) {
   const videoDetails = response.videoDetails;
@@ -237,8 +312,7 @@ var YouTubeMusicDataSourcePlugin = class {
       throw new Error("No videoId provided in track");
     }
     try {
-      const playerResponse = await this.client.fetchPlayer(videoId);
-      return toStreamInfo(playerResponse, this.settings.preferAudioOnly);
+      return await this.resolvePlayableStream(videoId);
     } catch (error) {
       this.context?.log("warn", "Primary YouTube video failed, trying fallback:", error);
       const fallbackStream = await this.resolveStreamFromFallbackSearch(track, videoId);
@@ -278,6 +352,55 @@ var YouTubeMusicDataSourcePlugin = class {
       region: this.settings.region
     });
   }
+  async resolvePlayableStream(videoId) {
+    try {
+      const playerResponse = await this.client.fetchPlayer(videoId, {
+        requirePlayable: true
+      });
+      return toStreamInfo(playerResponse, this.settings.preferAudioOnly);
+    } catch (error) {
+      this.context?.log("warn", `Player API failed for ${videoId}, trying yt-dlp`, error);
+      return this.resolveStreamWithYtDlp(videoId);
+    }
+  }
+  async resolveStreamWithYtDlp(videoId) {
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const candidates = ["/opt/homebrew/bin/yt-dlp", "yt-dlp"];
+    let lastError = null;
+    for (const command of candidates) {
+      try {
+        const { stdout } = await execFileAsync(
+          command,
+          [
+            "--dump-single-json",
+            "--no-playlist",
+            "--no-warnings",
+            "--skip-download",
+            "-f",
+            "ba[protocol!=m3u8]/ba/bestaudio",
+            videoUrl
+          ],
+          {
+            timeout: 2e4,
+            maxBuffer: 8 * 1024 * 1024
+          }
+        );
+        const payload = JSON.parse(stdout);
+        if (!payload.url) {
+          throw new Error(`yt-dlp did not return a playable URL for ${videoId}`);
+        }
+        return {
+          url: payload.url,
+          format: payload.ext === "webm" ? "webm" : "m4a",
+          bitrate: payload.abr ? Math.round(payload.abr * 1e3) : void 0,
+          headers: payload.http_headers
+        };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(`yt-dlp failed to resolve stream for ${videoId}`);
+  }
   async resolveStreamFromFallbackSearch(track, excludedVideoId) {
     const fallbackQuery = [track.title, track.artist].filter(Boolean).join(" ").trim();
     if (!fallbackQuery) {
@@ -290,9 +413,9 @@ var YouTubeMusicDataSourcePlugin = class {
         continue;
       }
       try {
-        const playerResponse = await this.client.fetchPlayer(candidateVideoId);
+        const stream = await this.resolvePlayableStream(candidateVideoId);
         this.context?.log("info", `Resolved fallback YouTube stream with candidate: ${candidateVideoId}`);
-        return toStreamInfo(playerResponse, this.settings.preferAudioOnly);
+        return stream;
       } catch (error) {
         this.context?.log("warn", `Fallback YouTube candidate not playable: ${candidateVideoId}`, error);
       }

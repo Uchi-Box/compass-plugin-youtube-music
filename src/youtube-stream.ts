@@ -32,34 +32,34 @@ export function toStreamInfo(
   response: YouTubePlayerResponse,
   preferAudioOnly: boolean
 ): StreamInfo {
+  const bestAudio = pickBestAudioFormat(
+    response.streamingData?.adaptiveFormats ?? [],
+    preferAudioOnly
+  )
+
+  if (bestAudio?.url) {
+    const format = bestAudio.mimeType.startsWith('audio/webm') ? 'webm' : 'm4a'
+
+    return {
+      url: bestAudio.url,
+      format,
+      bitrate: bestAudio.bitrate,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        Origin: 'https://music.youtube.com',
+        Referer: 'https://music.youtube.com/'
+      }
+    }
+  }
+
   if (response.playabilityStatus?.status !== 'OK') {
     throw new Error(
       `Video not playable: ${response.playabilityStatus?.reason ?? 'unknown reason'}`
     )
   }
 
-  const bestAudio = pickBestAudioFormat(
-    response.streamingData?.adaptiveFormats ?? [],
-    preferAudioOnly
-  )
-
-  if (!bestAudio?.url) {
-    throw new Error('No audio streams available for this video')
-  }
-
-  const format = bestAudio.mimeType.startsWith('audio/webm') ? 'webm' : 'm4a'
-
-  return {
-    url: bestAudio.url,
-    format,
-    bitrate: bestAudio.bitrate,
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-      Origin: 'https://music.youtube.com',
-      Referer: 'https://music.youtube.com/'
-    }
-  }
+  throw new Error('No audio streams available for this video')
 }
 
 export function toTrackMetadata(

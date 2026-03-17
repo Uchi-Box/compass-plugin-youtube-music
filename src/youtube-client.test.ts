@@ -48,4 +48,67 @@ describe('youtube-client', () => {
       })
     )
   })
+
+  it('falls back to alternate player clients when WEB_REMIX is unavailable', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            playabilityStatus: {
+              status: 'ERROR',
+              reason: 'Video unavailable'
+            }
+          })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            playabilityStatus: { status: 'OK' },
+            streamingData: {
+              adaptiveFormats: [
+                {
+                  mimeType: 'audio/webm; codecs="opus"',
+                  url: 'https://rr.youtube.com/videoplayback?audio=android',
+                  bitrate: 128000
+                }
+              ]
+            }
+          })
+      })
+
+    const client = new YouTubeClient({ fetch: fetchImpl, region: 'zh-CN' })
+
+    await expect(client.fetchPlayer('video-2')).resolves.toMatchObject({
+      playabilityStatus: { status: 'OK' }
+    })
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'X-Youtube-Client-Name': '3',
+          'X-Youtube-Client-Version': '19.44.38'
+        }),
+        body: JSON.stringify({
+          videoId: 'video-2',
+          contentCheckOk: true,
+          racyCheckOk: true,
+          context: {
+            client: {
+              clientName: 'ANDROID',
+              clientVersion: '19.44.38',
+              androidSdkVersion: 33,
+              hl: 'zh',
+              gl: 'CN'
+            }
+          }
+        })
+      })
+    )
+  })
 })
