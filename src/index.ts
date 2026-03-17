@@ -9,7 +9,7 @@ import type {
   StreamInfo,
   TrackMetadata,
   TrackReference
-} from './compass-plugin'
+} from '@uchi-box/compass-plugin-sdk'
 import { YouTubeClient } from './youtube-client'
 import { parseYouTubeSearchResults } from './youtube-search'
 import { toStreamInfo, toTrackMetadata } from './youtube-stream'

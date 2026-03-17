@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { YouTubeMusicDataSourcePlugin } from './index'
-import type { PluginContext } from './compass-plugin'
+import type { PluginContext } from '@uchi-box/compass-plugin-sdk'
 
 describe('YouTubeMusicDataSourcePlugin', () => {
   let plugin: YouTubeMusicDataSourcePlugin

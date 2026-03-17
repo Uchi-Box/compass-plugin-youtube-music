@@ -17,6 +17,7 @@
     "tsup": "8.5.1",
     "typescript": "5.9.3",
     "vitest": "4.0.18",
-    "@types/node": "^24.5.2"
+    "@types/node": "^24.5.2",
+    "@uchi-box/compass-plugin-sdk": "0.1.0"
   }
 }
