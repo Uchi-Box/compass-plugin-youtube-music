@@ -1,8 +1,4 @@
-import type { StreamInfo, TrackMetadata } from './plugin-types'
-import type {
-  YouTubeAdaptiveFormat,
-  YouTubePlayerResponse
-} from './youtube-types'
+import type { YouTubeAdaptiveFormat, YouTubePlayerResponse } from './youtube-types'
 
 export function pickBestAudioFormat(
   formats: YouTubeAdaptiveFormat[],
@@ -16,7 +12,7 @@ export function pickBestAudioFormat(
     return null
   }
 
-  return [...audioFormats].sort((left, right) => {
+  const sorted = [...audioFormats].sort((left, right) => {
     const leftIsWebm = left.mimeType.startsWith('audio/webm') ? 1 : 0
     const rightIsWebm = right.mimeType.startsWith('audio/webm') ? 1 : 0
 
@@ -25,13 +21,14 @@ export function pickBestAudioFormat(
     }
 
     return right.bitrate - left.bitrate
-  })[0]!
+  })
+  return sorted[0] ?? null
 }
 
 export function toStreamInfo(
   response: YouTubePlayerResponse,
   preferAudioOnly: boolean
-): StreamInfo {
+): any {
   const bestAudio = pickBestAudioFormat(
     response.streamingData?.adaptiveFormats ?? [],
     preferAudioOnly
@@ -45,8 +42,7 @@ export function toStreamInfo(
       format,
       bitrate: bestAudio.bitrate,
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         Origin: 'https://music.youtube.com',
         Referer: 'https://music.youtube.com/'
       }
@@ -54,9 +50,7 @@ export function toStreamInfo(
   }
 
   if (response.playabilityStatus?.status !== 'OK') {
-    throw new Error(
-      `Video not playable: ${response.playabilityStatus?.reason ?? 'unknown reason'}`
-    )
+    throw new Error(`Video not playable: ${response.playabilityStatus?.reason ?? 'unknown reason'}`)
   }
 
   throw new Error('No audio streams available for this video')
@@ -65,20 +59,16 @@ export function toStreamInfo(
 export function toTrackMetadata(
   response: YouTubePlayerResponse,
   fallbackTitle: string
-): TrackMetadata {
+): any {
   const videoDetails = response.videoDetails
   const microformat = response.microformat?.playerMicroformatRenderer
   const thumbnail =
-    videoDetails?.thumbnail?.thumbnails?.[0]?.url ??
-    microformat?.thumbnail?.thumbnails?.[0]?.url
+    videoDetails?.thumbnail?.thumbnails?.[0]?.url ?? microformat?.thumbnail?.thumbnails?.[0]?.url
 
   return {
-    title:
-      videoDetails?.title ?? microformat?.title?.simpleText ?? fallbackTitle,
+    title: videoDetails?.title ?? microformat?.title?.simpleText ?? fallbackTitle,
     artist: videoDetails?.author ?? microformat?.ownerChannelName,
-    duration: Number(
-      videoDetails?.lengthSeconds ?? microformat?.lengthSeconds ?? 0
-    ),
+    duration: Number(videoDetails?.lengthSeconds ?? microformat?.lengthSeconds ?? 0),
     coverUrl: thumbnail
   }
 }

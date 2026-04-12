@@ -3,9 +3,9 @@ import { createWriteStream, existsSync } from 'node:fs'
 import { chmod, mkdir, rename, stat, unlink } from 'node:fs/promises'
 import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
-import { pipeline } from 'node:stream/promises'
 import type { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
+import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
@@ -50,7 +50,7 @@ async function downloadBinary(
   await mkdir(CACHE_DIR, { recursive: true })
 
   const url = getDownloadUrl()
-  const tmpPath = cachedPath + '.tmp'
+  const tmpPath = `${cachedPath}.tmp`
 
   const response = await fetchImpl(url, { redirect: 'follow' })
   if (!response.ok || !response.body) {

@@ -1,53 +1,29 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { resolveYtDlpPath } from './yt-dlp-binary'
-import type {
-  DataSourcePlugin,
-  DataSourceSearchResult,
-  Lyrics,
-  PluginContext,
-  PluginInstance,
-  PluginManifest,
-  SearchOptions,
-  StreamInfo,
-  TrackMetadata,
-  TrackReference
-} from './plugin-types'
 import { YouTubeClient } from './youtube-client'
 import { parseYouTubeSearchResults } from './youtube-search'
 import { toStreamInfo, toTrackMetadata } from './youtube-stream'
 import type { YouTubeFetch, YouTubeMusicSettings } from './youtube-types'
+import { resolveYtDlpPath } from './yt-dlp-binary'
 
 const execFileAsync = promisify(execFile)
 
-const manifest: PluginManifest = {
-  id: 'com.compass.youtube-music',
-  name: 'YouTube Music',
-  version: '0.1.0',
-  description: 'Search and play music from YouTube Music',
-  author: 'Compass Music Team',
-  platforms: ['all'],
-  main: 'dist/index.js',
-  brandColor: '#dc322f',
-  capabilities: {
-    dataSource: true
-  }
-}
+const PLUGIN_ID = 'compass-plugin-youtube-music'
 
 const DEFAULT_SETTINGS: YouTubeMusicSettings = {
   searchLimit: 20,
   preferAudioOnly: true
 }
 
-class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
-  readonly id = manifest.id
-  readonly name = manifest.name
+class YouTubeMusicDataSourcePlugin {
+  readonly id = PLUGIN_ID
+  readonly name = 'YouTube Music'
 
-  private context?: PluginContext
+  private context?: any
   private settings: YouTubeMusicSettings = DEFAULT_SETTINGS
   private client = this.createClient(globalThis.fetch)
 
-  async activate(context: PluginContext): Promise<void> {
+  async activate(context: any): Promise<void> {
     this.context = context
     this.refreshSettings()
     context.log('info', 'YouTube Music data source plugin activated')
@@ -57,10 +33,7 @@ class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
     this.context?.log('info', 'YouTube Music data source plugin deactivated')
   }
 
-  async search(
-    query: string,
-    options?: SearchOptions
-  ): Promise<DataSourceSearchResult[]> {
+  async search(query: string, options?: any): Promise<any[]> {
     this.refreshSettings()
     const limit = options?.limit ?? this.settings.searchLimit
 
@@ -82,7 +55,7 @@ class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
     }
   }
 
-  async resolveStream(track: TrackReference): Promise<StreamInfo> {
+  async resolveStream(track: any): Promise<any> {
     this.refreshSettings()
     const videoId = track.source.externalId || track.id
     if (!videoId) {
@@ -93,10 +66,7 @@ class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
       return await this.resolvePlayableStream(videoId)
     } catch (error) {
       this.context?.log('warn', 'Primary YouTube video failed, trying fallback:', error)
-      const fallbackStream = await this.resolveStreamFromFallbackSearch(
-        track,
-        videoId
-      )
+      const fallbackStream = await this.resolveStreamFromFallbackSearch(track, videoId)
       if (fallbackStream) {
         return fallbackStream
       }
@@ -106,7 +76,7 @@ class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
     }
   }
 
-  async getMetadata(track: TrackReference): Promise<TrackMetadata> {
+  async getMetadata(track: any): Promise<any> {
     this.refreshSettings()
     const videoId = track.source.externalId || track.id
 
@@ -119,7 +89,7 @@ class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
     }
   }
 
-  async getLyrics(_track: TrackReference): Promise<Lyrics | null> {
+  async getLyrics(_track: any): Promise<any> {
     return null
   }
 
@@ -128,8 +98,7 @@ class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
 
     this.settings = {
       searchLimit: this.context.getSetting<number>('searchLimit') ?? 20,
-      preferAudioOnly:
-        this.context.getSetting<boolean>('preferAudioOnly') ?? true,
+      preferAudioOnly: this.context.getSetting<boolean>('preferAudioOnly') ?? true,
       region: this.context.getSetting<string>('region')
     }
     this.client = this.createClient(this.context.fetch ?? globalThis.fetch)
@@ -195,9 +164,9 @@ class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
   }
 
   private async resolveStreamFromFallbackSearch(
-    track: TrackReference,
+    track: any,
     excludedVideoId: string
-  ): Promise<StreamInfo | null> {
+  ): Promise<any> {
     const fallbackQuery = [track.title, track.artist].filter(Boolean).join(' ').trim()
     if (!fallbackQuery) {
       return null
@@ -232,5 +201,5 @@ class YouTubeMusicDataSourcePlugin implements DataSourcePlugin, PluginInstance {
 
 const plugin = new YouTubeMusicDataSourcePlugin()
 
-export { manifest, plugin as instance, YouTubeMusicDataSourcePlugin }
+export { YouTubeMusicDataSourcePlugin }
 export default plugin

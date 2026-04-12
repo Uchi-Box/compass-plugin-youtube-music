@@ -1,5 +1,5 @@
-import type { YouTubeFetch, YouTubePlayerResponse } from './youtube-types'
 import { buildYouTubeSearchUrl } from './youtube-search'
+import type { YouTubeFetch, YouTubePlayerResponse } from './youtube-types'
 
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
@@ -15,10 +15,7 @@ interface PlayerClientProfile {
   clientVersion: string
   userAgent?: string
   extraHeaders?: Record<string, string>
-  buildBody: (
-    videoId: string,
-    locale: { hl: string; gl: string }
-  ) => Record<string, unknown>
+  buildBody: (videoId: string, locale: { hl: string; gl: string }) => Record<string, unknown>
 }
 
 interface FetchPlayerOptions {
@@ -77,9 +74,7 @@ export class YouTubeClient {
       })
 
       if (!response.ok) {
-        lastFailure = new Error(
-          `${profile.clientName} player API failed: ${response.status}`
-        )
+        lastFailure = new Error(`${profile.clientName} player API failed: ${response.status}`)
         continue
       }
 
@@ -130,8 +125,7 @@ const PLAYER_CLIENT_PROFILES: PlayerClientProfile[] = [
     endpoint: 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
     clientName: 'ANDROID',
     clientVersion: '19.44.38',
-    userAgent:
-      'com.google.android.youtube/19.44.38 (Linux; U; Android 13) gzip',
+    userAgent: 'com.google.android.youtube/19.44.38 (Linux; U; Android 13) gzip',
     extraHeaders: {
       'X-Youtube-Client-Name': '3',
       'X-Youtube-Client-Version': '19.44.38'
@@ -155,8 +149,7 @@ const PLAYER_CLIENT_PROFILES: PlayerClientProfile[] = [
     endpoint: 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
     clientName: 'IOS',
     clientVersion: '19.45.4',
-    userAgent:
-      'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X)',
+    userAgent: 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X)',
     extraHeaders: {
       'X-Youtube-Client-Name': '5',
       'X-Youtube-Client-Version': '19.45.4'

@@ -1,15 +1,10 @@
-import type { DataSourceSearchResult } from './plugin-types'
-
 export interface YouTubeMusicSettings {
   searchLimit: number
   preferAudioOnly: boolean
   region?: string
 }
 
-export type YouTubeFetch = (
-  url: string,
-  options?: RequestInit
-) => Promise<Response>
+export type YouTubeFetch = (url: string, options?: RequestInit) => Promise<Response>
 
 export interface YouTubeVideoRenderer {
   videoId?: string
@@ -85,4 +80,4 @@ export interface SearchParseOptions {
   onError?: (message: string, error: unknown) => void
 }
 
-export interface ParsedSearchResult extends DataSourceSearchResult {}
+export type ParsedSearchResult = any

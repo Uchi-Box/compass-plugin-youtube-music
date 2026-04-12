@@ -18,9 +18,7 @@ export function parseDurationSeconds(duration: string): number {
     return (parts[0] ?? 0) * 60 + (parts[1] ?? 0)
   }
   if (parts.length === 3) {
-    return (
-      (parts[0] ?? 0) * 3600 + (parts[1] ?? 0) * 60 + (parts[2] ?? 0)
-    )
+    return (parts[0] ?? 0) * 3600 + (parts[1] ?? 0) * 60 + (parts[2] ?? 0)
   }
   return 0
 }
@@ -31,9 +29,7 @@ function getVideoTitle(video: YouTubeVideoRenderer): string {
 
 function getVideoArtist(video: YouTubeVideoRenderer): string {
   return (
-    video.ownerText?.runs?.[0]?.text ??
-    video.shortBylineText?.runs?.[0]?.text ??
-    'Unknown Artist'
+    video.ownerText?.runs?.[0]?.text ?? video.shortBylineText?.runs?.[0]?.text ?? 'Unknown Artist'
   )
 }
 
@@ -43,9 +39,7 @@ function getVideoCover(video: YouTubeVideoRenderer): string {
 
 function getVideoDuration(video: YouTubeVideoRenderer): number {
   const durationText =
-    video.lengthText?.simpleText ??
-    video.lengthText?.accessibility?.accessibilityData?.label ??
-    ''
+    video.lengthText?.simpleText ?? video.lengthText?.accessibility?.accessibilityData?.label ?? ''
   return parseDurationSeconds(durationText)
 }
 
@@ -64,8 +58,8 @@ export function parseYouTubeSearchResults(
 
     const data = JSON.parse(match[1]) as YouTubeSearchInitialData
     const sections =
-      data.contents?.twoColumnSearchResultsRenderer?.primaryContents
-        ?.sectionListRenderer?.contents ?? []
+      data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer
+        ?.contents ?? []
 
     for (const section of sections) {
       const items = section.itemSectionRenderer?.contents ?? []
