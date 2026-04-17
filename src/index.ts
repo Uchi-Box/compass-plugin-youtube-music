@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import type { PluginContext, StreamInfo } from './plugin-types'
 import { YouTubeClient } from './youtube-client'
 import { parseYouTubeSearchResults } from './youtube-search'
 import { toStreamInfo, toTrackMetadata } from './youtube-stream'
@@ -19,11 +20,11 @@ class YouTubeMusicDataSourcePlugin {
   readonly id = PLUGIN_ID
   readonly name = 'YouTube Music'
 
-  private context?: any
+  private context?: PluginContext
   private settings: YouTubeMusicSettings = DEFAULT_SETTINGS
   private client = this.createClient(globalThis.fetch)
 
-  async activate(context: any): Promise<void> {
+  async activate(context: PluginContext): Promise<void> {
     this.context = context
     this.refreshSettings()
     context.log('info', 'YouTube Music data source plugin activated')
@@ -97,9 +98,9 @@ class YouTubeMusicDataSourcePlugin {
     if (!this.context) return
 
     this.settings = {
-      searchLimit: this.context.getSetting<number>('searchLimit') ?? 20,
-      preferAudioOnly: this.context.getSetting<boolean>('preferAudioOnly') ?? true,
-      region: this.context.getSetting<string>('region')
+      searchLimit: this.context.config.get<number>('searchLimit') ?? 20,
+      preferAudioOnly: this.context.config.get<boolean>('preferAudioOnly') ?? true,
+      region: this.context.config.get<string>('region')
     }
     this.client = this.createClient(this.context.fetch ?? globalThis.fetch)
   }

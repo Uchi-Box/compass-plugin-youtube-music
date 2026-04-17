@@ -5,10 +5,9 @@ import type { PluginContext } from './plugin-types'
 describe('YouTubeMusicDataSourcePlugin', () => {
   let plugin: YouTubeMusicDataSourcePlugin
   const mockFetch = vi.fn()
-  const mockGetSetting = vi.fn()
-  const mockSetSetting = vi.fn()
+  const mockConfigGet = vi.fn()
   const mockLog = vi.fn()
-  const mockContext: PluginContext = {
+  const mockContext = {
     manifest: {
       id: 'test',
       name: 'Test',
@@ -17,20 +16,20 @@ describe('YouTubeMusicDataSourcePlugin', () => {
       main: 'dist/index.js',
       capabilities: { dataSource: true }
     },
-    getDatabase: vi.fn(() => {
-      throw new Error('not needed in test')
-    }),
-    generateId: vi.fn((prefix: string) => `${prefix}-1`),
-    getSetting: mockGetSetting,
-    setSetting: mockSetSetting,
+    platform: 'desktop' as const,
+    config: {
+      get: mockConfigGet,
+      set: vi.fn(),
+      observe: vi.fn(() => ({ dispose: vi.fn() }))
+    },
     log: mockLog,
     fetch: mockFetch
-  }
+  } satisfies PluginContext
 
   beforeEach(() => {
     plugin = new YouTubeMusicDataSourcePlugin()
     vi.clearAllMocks()
-    mockGetSetting.mockImplementation((key: string) => {
+    mockConfigGet.mockImplementation((key: string) => {
       if (key === 'searchLimit') return 20
       if (key === 'preferAudioOnly') return true
       if (key === 'region') return 'zh-CN'
@@ -96,7 +95,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
         album: 'YouTube',
         coverUrl: 'cover.jpg',
         duration: 225,
-        source: 'com.compass.youtube-music'
+        source: 'compass-plugin-youtube-music'
       }
     ])
     expect(mockFetch).toHaveBeenCalledTimes(1)
@@ -124,7 +123,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
     await expect(
       plugin.resolveStream({
         id: 'abc123',
-        source: { plugin: 'com.compass.youtube-music', externalId: 'abc123' }
+        source: { plugin: 'compass-plugin-youtube-music', externalId: 'abc123' }
       })
     ).resolves.toMatchObject({
       url: 'https://rr.youtube.com/videoplayback?audio=webm',
@@ -136,7 +135,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
   it('falls back to another playable candidate when the primary video is unavailable', async () => {
     await plugin.activate(mockContext)
 
-    vi.spyOn(plugin as never, 'resolvePlayableStream' as never)
+    vi.spyOn(plugin as any, 'resolvePlayableStream')
       .mockRejectedValueOnce(new Error('primary not playable'))
       .mockResolvedValueOnce({
         url: 'https://rr.youtube.com/videoplayback?audio=fallback',
@@ -190,7 +189,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
         id: 'abc123',
         title: 'Blocked Song',
         artist: 'Test Artist',
-        source: { plugin: 'com.compass.youtube-music', externalId: 'abc123' }
+        source: { plugin: 'compass-plugin-youtube-music', externalId: 'abc123' }
       })
     ).resolves.toMatchObject({
       url: 'https://rr.youtube.com/videoplayback?audio=fallback',
@@ -202,7 +201,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
   it('falls back to yt-dlp when player clients cannot resolve a stream', async () => {
     await plugin.activate(mockContext)
 
-    vi.spyOn(plugin as never, 'resolveStreamWithYtDlp' as never).mockResolvedValue({
+    vi.spyOn(plugin as any, 'resolveStreamWithYtDlp').mockResolvedValue({
       url: 'https://rr.youtube.com/videoplayback?audio=ytdlp',
       format: 'm4a',
       bitrate: 128000
@@ -239,7 +238,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
         id: 'blocked',
         title: 'Blocked Song',
         artist: 'Blocked Artist',
-        source: { plugin: 'com.compass.youtube-music', externalId: 'blocked' }
+        source: { plugin: 'compass-plugin-youtube-music', externalId: 'blocked' }
       })
     ).resolves.toMatchObject({
       url: 'https://rr.youtube.com/videoplayback?audio=ytdlp',
@@ -266,7 +265,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
     await expect(
       plugin.getMetadata({
         id: 'abc123',
-        source: { plugin: 'com.compass.youtube-music', externalId: 'abc123' }
+        source: { plugin: 'compass-plugin-youtube-music', externalId: 'abc123' }
       })
     ).resolves.toEqual({
       title: 'Metadata Song',
@@ -279,7 +278,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
   it('refreshes settings from context before requests', async () => {
     await plugin.activate(mockContext)
 
-    mockGetSetting.mockImplementation((key: string) => {
+    mockConfigGet.mockImplementation((key: string) => {
       if (key === 'searchLimit') return 1
       if (key === 'preferAudioOnly') return false
       if (key === 'region') return 'ja-JP'
@@ -332,7 +331,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
     await expect(
       plugin.getLyrics({
         id: 'abc123',
-        source: { plugin: 'com.compass.youtube-music', externalId: 'abc123' }
+        source: { plugin: 'compass-plugin-youtube-music', externalId: 'abc123' }
       })
     ).resolves.toBeNull()
   })

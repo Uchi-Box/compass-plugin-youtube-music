@@ -1,7 +1,6 @@
 {
   "name": "compass-plugin-youtube-music",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.1.3",
   "description": "Standalone YouTube Music data source plugin for Compass Music",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,5 +17,22 @@
     "typescript": "5.9.3",
     "vitest": "4.0.18",
     "@types/node": "^24.5.2"
+  },
+  "compass": {
+    "id": "com.compass.youtube-music",
+    "name": "YouTube Music",
+    "version": "0.1.3",
+    "description": "Search and play music from YouTube Music",
+    "author": "Compass Music Team",
+    "platforms": [
+      "all"
+    ],
+    "main": "dist/index.js",
+    "brandColor": "#dc322f",
+    "capabilities": {
+      "dataSource": true
+    },
+    "type": "plugin",
+    "pluginType": "data-source"
   }
 }
