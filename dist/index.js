@@ -367,36 +367,52 @@ async function resolveYtDlpPath(fetchImpl = globalThis.fetch) {
 
 // src/index.ts
 var execFileAsync2 = promisify2(execFile2);
-var PLUGIN_ID = "compass-plugin-youtube-music";
+var SOURCE_ID = "youtube-music";
 var DEFAULT_SETTINGS = {
   searchLimit: 20,
   preferAudioOnly: true
 };
-var YouTubeMusicDataSourcePlugin = class {
-  id = PLUGIN_ID;
-  name = "YouTube Music";
+var YouTubeMusicPlugin = class {
   context;
   settings = DEFAULT_SETTINGS;
   client = this.createClient(globalThis.fetch);
   async activate(context) {
     this.context = context;
     this.refreshSettings();
-    context.log("info", "YouTube Music data source plugin activated");
+    const provider = {
+      search: (q, opts) => this.search(q, opts),
+      resolveStream: (ref) => this.resolveStream(ref),
+      getMetadata: (ref) => this.getMetadata(ref),
+      getLyrics: () => this.getLyrics()
+    };
+    if (!context.sources) throw new Error("YouTube Music plugin requires the `sources` capability");
+    context.subscriptions.push(context.sources.register(SOURCE_ID, provider));
+    context.log("info", "YouTube Music source plugin activated");
   }
   async deactivate() {
-    this.context?.log("info", "YouTube Music data source plugin deactivated");
+    this.context?.log("info", "YouTube Music source plugin deactivated");
   }
   async search(query, options) {
     this.refreshSettings();
     const limit = options?.limit ?? this.settings.searchLimit;
     try {
       const html = await this.client.fetchSearchPage(query);
-      return parseYouTubeSearchResults(html, {
+      const parsed = parseYouTubeSearchResults(html, {
         limit,
-        source: this.id,
+        source: SOURCE_ID,
         onWarn: (message) => this.context?.log("warn", message),
         onError: (message, error) => this.context?.log("error", message, error)
       });
+      return parsed.map(
+        (r) => ({
+          ref: { source: SOURCE_ID, id: r.id },
+          title: r.title,
+          artist: r.artist,
+          album: r.album,
+          coverUrl: r.coverUrl,
+          duration: r.duration
+        })
+      );
     } catch (error) {
       if (error instanceof Error) {
         this.context?.log("error", "Search failed:", error.message);
@@ -406,17 +422,17 @@ var YouTubeMusicDataSourcePlugin = class {
       return [];
     }
   }
-  async resolveStream(track) {
+  async resolveStream(ref) {
     this.refreshSettings();
-    const videoId = track.source.externalId || track.id;
+    const videoId = ref?.id;
     if (!videoId) {
-      throw new Error("No videoId provided in track");
+      throw new Error("No videoId provided in track ref");
     }
     try {
       return await this.resolvePlayableStream(videoId);
     } catch (error) {
       this.context?.log("warn", "Primary YouTube video failed, trying fallback:", error);
-      const fallbackStream = await this.resolveStreamFromFallbackSearch(track, videoId);
+      const fallbackStream = await this.resolveStreamFromFallbackSearch(videoId);
       if (fallbackStream) {
         return fallbackStream;
       }
@@ -424,18 +440,19 @@ var YouTubeMusicDataSourcePlugin = class {
       throw error;
     }
   }
-  async getMetadata(track) {
+  async getMetadata(ref) {
     this.refreshSettings();
-    const videoId = track.source.externalId || track.id;
+    const videoId = ref?.id;
+    if (!videoId) return null;
     try {
       const playerResponse = await this.client.fetchPlayer(videoId);
-      return toTrackMetadata(playerResponse, track.id);
+      return toTrackMetadata(playerResponse, videoId);
     } catch (error) {
       this.context?.log("error", "Failed to get metadata:", error);
-      return { title: track.id };
+      return null;
     }
   }
-  async getLyrics(_track) {
+  async getLyrics() {
     return null;
   }
   refreshSettings() {
@@ -445,7 +462,7 @@ var YouTubeMusicDataSourcePlugin = class {
       preferAudioOnly: this.context.config.get("preferAudioOnly") ?? true,
       region: this.context.config.get("region")
     };
-    this.client = this.createClient(this.context.fetch ?? globalThis.fetch);
+    this.client = this.createClient(this.context.net?.fetch ?? globalThis.fetch);
   }
   createClient(fetchImpl) {
     return new YouTubeClient({
@@ -466,7 +483,7 @@ var YouTubeMusicDataSourcePlugin = class {
   }
   async resolveStreamWithYtDlp(videoId) {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const fetchImpl = this.context?.fetch ?? globalThis.fetch;
+    const fetchImpl = this.context?.net?.fetch ?? globalThis.fetch;
     const command = await resolveYtDlpPath(fetchImpl);
     const { stdout } = await execFileAsync2(
       command,
@@ -495,14 +512,19 @@ var YouTubeMusicDataSourcePlugin = class {
       headers: payload.http_headers
     };
   }
-  async resolveStreamFromFallbackSearch(track, excludedVideoId) {
-    const fallbackQuery = [track.title, track.artist].filter(Boolean).join(" ").trim();
+  async resolveStreamFromFallbackSearch(excludedVideoId) {
+    let fallbackQuery = "";
+    try {
+      const meta = await this.getMetadata({ source: SOURCE_ID, id: excludedVideoId });
+      fallbackQuery = [meta?.title, meta?.artist].filter(Boolean).join(" ").trim();
+    } catch {
+    }
     if (!fallbackQuery) {
       return null;
     }
     const candidates = await this.search(fallbackQuery, { limit: 5 });
     for (const candidate of candidates) {
-      const candidateVideoId = candidate.id;
+      const candidateVideoId = candidate.ref.id;
       if (!candidateVideoId || candidateVideoId === excludedVideoId) {
         continue;
       }
@@ -524,10 +546,10 @@ var YouTubeMusicDataSourcePlugin = class {
     return null;
   }
 };
-var plugin = new YouTubeMusicDataSourcePlugin();
+var plugin = new YouTubeMusicPlugin();
 var index_default = plugin;
 export {
-  YouTubeMusicDataSourcePlugin,
+  YouTubeMusicPlugin,
   index_default as default
 };
 //# sourceMappingURL=index.js.map

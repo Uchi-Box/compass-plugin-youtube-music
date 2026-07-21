@@ -45,18 +45,18 @@ declare class NotificationManager {
 	onDidClearNotifications(cb: () => void): Disposable$1;
 	private add;
 }
-interface AuthResult {
+export interface AuthResult {
 	url: string;
 	cookies: AuthWindowCookie[];
 	scriptResult?: unknown;
 }
-interface AuthWindowCookie {
+export interface AuthWindowCookie {
 	name: string;
 	value: string;
 	domain: string;
 	path: string;
 }
-interface AuthWindowOptions {
+export interface AuthWindowOptions {
 	title?: string;
 	width?: number;
 	height?: number;
@@ -65,7 +65,7 @@ interface AuthWindowOptions {
 	/** JS injected into the auth window on each page load. If it returns a non-null value, the window closes and resolves. */
 	injectScript?: string;
 }
-interface CompassPackageManifest {
+export interface CompassPackageManifest {
 	name: string;
 	version: string;
 	description?: string;
@@ -100,18 +100,44 @@ interface CompassPackageManifest {
 		platforms?: ("desktop" | "mobile" | "all")[];
 	};
 }
-interface Lyrics {
+export interface CompassPlugin {
+	activate(context: PluginContext, state?: unknown): void | Promise<void>;
+	deactivate(): void | Promise<void>;
+	serialize?(): unknown;
+	config?: Record<string, unknown>;
+}
+export interface Lyrics {
 	lines?: Array<{
 		time: number;
 		text: string;
 	}>;
 	text?: string;
 }
+export interface Package {
+	name: string;
+	path: string;
+	manifest: CompassPackageManifest;
+	/** @deprecated Plugins run in Worker; no in-process module handle. */
+	mainModule?: CompassPlugin;
+	state: "loaded" | "activated" | "deactivated";
+	activationTime?: number;
+}
 /** Declarative capability contributions (VSCode-style `contributes`). */
-interface PackageContributions {
+export interface PackageContributions {
 	sources?: SourceContribution[];
 }
-interface Playlist extends BaseDocument {
+/**
+ * Platform loader for plugin packages. ADR-0002: plugins run in a Worker, so
+ * the loader reads ESM source text rather than `require()`-ing into the UI
+ * thread. In-process `loadModule` is removed (hard break).
+ */
+export interface PackageLoader {
+	getPackagePaths(): Promise<string[]>;
+	readManifest(packagePath: string): Promise<CompassPackageManifest>;
+	/** Read the plugin main module as ESM source text for Worker evaluation. */
+	readModuleSource(packagePath: string, main: string): Promise<string>;
+}
+export interface Playlist extends BaseDocument {
 	name: string;
 	description?: string;
 	coverUrl?: string;
@@ -123,7 +149,7 @@ interface Playlist extends BaseDocument {
 	/** User-defined sort order for sidebar display. */
 	order?: number;
 }
-interface PluginConfigContext {
+export interface PluginConfigContext {
 	get<T>(key: string): T;
 	set(key: string, value: unknown): void;
 	observe<T>(key: string, callback: (value: T) => void): Disposable$1;
@@ -132,7 +158,7 @@ interface PluginConfigContext {
 		newValue: T;
 	}) => void): Disposable$1;
 }
-interface PluginContext {
+export interface PluginContext {
 	readonly pluginId: string;
 	readonly manifest: CompassPackageManifest;
 	readonly platform: "desktop" | "mobile";
@@ -167,7 +193,7 @@ interface PluginContext {
 	readonly registerSettingsPanel?: (renderer: SettingsPanelRenderer) => Disposable$1;
 	log(level: "info" | "warn" | "error", message: string, ...args: unknown[]): void;
 }
-interface PluginCredentialStore {
+export interface PluginCredentialStore {
 	get(key: string): Promise<string | null>;
 	set(key: string, value: string): Promise<void>;
 	delete(key: string): Promise<void>;
@@ -176,13 +202,13 @@ interface PluginCredentialStore {
  * Narrowed ingest facade (capability `ingest`) — the only library write a
  * source plugin gets by default. Full `library` remains an explicit opt-in.
  */
-interface PluginIngestFacade {
+export interface PluginIngestFacade {
 	ingestTracks(inputs: TrackInput[], options?: {
 		inLibrary?: boolean;
 	}): Promise<Track[]>;
 }
 /** Library operations exposed to plugins. */
-interface PluginLibraryFacade {
+export interface PluginLibraryFacade {
 	getTrack(trackId: string): Promise<Track>;
 	searchTracks(query: string): Promise<Track[]>;
 	getLibraryTracks(): Promise<Track[]>;
@@ -200,14 +226,14 @@ interface PluginLibraryFacade {
  * Network facade (capability `net`) — CORS-free fetch scoped to the plugin's
  * own session, plus auth-window and protocol helpers.
  */
-interface PluginNetFacade {
+export interface PluginNetFacade {
 	fetch(url: string, options?: RequestInit): Promise<Response>;
 	openAuthWindow?(url: string, opts?: AuthWindowOptions): Promise<AuthResult>;
 	clearSessionData?(): Promise<void>;
 	registerProtocol?(scheme: string, handler: ProtocolHandler): void;
 }
 /** Playback controls exposed to plugins. */
-interface PluginPlaybackFacade {
+export interface PluginPlaybackFacade {
 	getSnapshot(): PlaybackSnapshot;
 	playTrack(trackId: string, options?: PlayTrackOptions): Promise<void>;
 	play(): Promise<void>;
@@ -222,7 +248,7 @@ interface PluginPlaybackFacade {
 	onDidChange(cb: (snapshot: PlaybackSnapshot) => void): Disposable$1;
 }
 /** Playlist operations exposed to plugins. */
-interface PluginPlaylistFacade {
+export interface PluginPlaylistFacade {
 	createPlaylist(input: {
 		name: string;
 		description?: string;
@@ -240,10 +266,10 @@ interface PluginPlaylistFacade {
  * Source registration facade (capability `sources`). A plugin registers one or
  * more `SourceProvider`s for the ids it declared in `contributes.sources`.
  */
-interface PluginSourcesFacade {
+export interface PluginSourcesFacade {
 	register(sourceId: string, provider: SourceProvider): Disposable$1;
 }
-interface PluginToolRegistration {
+export interface PluginToolRegistration {
 	/** Tool name (without plugin prefix — it's added automatically). */
 	name: string;
 	description: string;
@@ -253,20 +279,20 @@ interface PluginToolRegistration {
 	permission?: PermissionLevel;
 	handler: (args: Record<string, unknown>) => Promise<ToolResult>;
 }
-interface ProtocolRequest {
+export interface ProtocolRequest {
 	url: string;
 	headers: Record<string, string>;
 }
-interface ProtocolResponse {
+export interface ProtocolResponse {
 	data: ArrayBuffer | ReadableStream | Response;
 	headers?: Record<string, string>;
 	statusCode?: number;
 }
-interface SearchOptions {
+export interface SearchOptions {
 	limit?: number;
 	offset?: number;
 }
-interface SettingsPanelButtonElement {
+export interface SettingsPanelButtonElement {
 	type: "button";
 	label: string;
 	/** Command name to dispatch when clicked (e.g. 'netease:login') */
@@ -274,33 +300,33 @@ interface SettingsPanelButtonElement {
 	variant?: "primary" | "danger";
 	disabled?: boolean;
 }
-interface SettingsPanelButtonGroupElement {
+export interface SettingsPanelButtonGroupElement {
 	type: "button-group";
 	children: SettingsPanelButtonElement[];
 }
-interface SettingsPanelDividerElement {
+export interface SettingsPanelDividerElement {
 	type: "divider";
 }
-interface SettingsPanelProgressElement {
+export interface SettingsPanelProgressElement {
 	type: "progress";
 	value: number;
 	max: number;
 	label?: string;
 }
 /** Renderer returned by plugins for custom settings panel UI. */
-interface SettingsPanelRenderer {
+export interface SettingsPanelRenderer {
 	/** Called by the host to get the current declarative UI tree. */
 	render(): SettingsPanelElement[];
 	/** Subscribe to state changes — host re-renders when callback fires. */
 	onDidChange?(callback: () => void): Disposable$1;
 }
-interface SettingsPanelStatusElement {
+export interface SettingsPanelStatusElement {
 	type: "status";
 	label: string;
 	value: string;
 	variant?: "success" | "warning" | "error";
 }
-interface SettingsPanelTextElement {
+export interface SettingsPanelTextElement {
 	type: "text";
 	content: string;
 	variant?: "muted";
@@ -310,7 +336,7 @@ interface SettingsPanelTextElement {
  * Modeled after VSCode's AuthenticationProvider: the source drives login via
  * host-provided net/secrets facades internally.
  */
-interface SourceAuthProvider {
+export interface SourceAuthProvider {
 	/** Human-readable label for the login method (e.g., "QR Code", "SMS", "Cookie"). */
 	loginLabel?: string;
 	getStatus(): Promise<AuthStatus>;
@@ -324,7 +350,7 @@ interface SourceAuthProvider {
  * Read by the host without activating the plugin (used for listing, platform
  * policy filtering, and deriving `onSource:<id>` activation events).
  */
-interface SourceContribution {
+export interface SourceContribution {
 	id: string;
 	name: string;
 	auth?: "none" | "optional" | "required";
@@ -337,14 +363,14 @@ interface SourceContribution {
  * register 0..N providers. All methods are async and return serializable values so
  * the provider can run behind the Worker RPC boundary (see ADR-0002).
  */
-interface SourceProvider {
+export interface SourceProvider {
 	search(query: string, options?: SearchOptions): Promise<SourceSearchResult[]>;
 	resolveStream(ref: TrackRef): Promise<StreamInfo>;
 	getMetadata?(ref: TrackRef): Promise<TrackMetadata | null>;
 	getLyrics?(ref: TrackRef): Promise<Lyrics | null>;
 	auth?: SourceAuthProvider;
 }
-interface SourceSearchResult {
+export interface SourceSearchResult {
 	ref: TrackRef;
 	title: string;
 	artist: string;
@@ -353,14 +379,14 @@ interface SourceSearchResult {
 	duration?: number;
 }
 /** Resolved audio stream information. */
-interface StreamInfo {
+export interface StreamInfo {
 	url: string;
 	format: AudioFormat;
 	bitrate?: number;
 	fileSize?: number;
 	headers?: Record<string, string>;
 }
-interface Track extends BaseDocument {
+export interface Track extends BaseDocument {
 	title: string;
 	artist?: string;
 	album?: string;
@@ -382,7 +408,7 @@ interface Track extends BaseDocument {
 	playCount: number;
 	tags?: string[];
 }
-interface TrackInput {
+export interface TrackInput {
 	title: string;
 	artist?: string;
 	album?: string;
@@ -400,7 +426,7 @@ interface TrackInput {
 	localPath?: string;
 	tags?: string[];
 }
-interface TrackMetadata {
+export interface TrackMetadata {
 	title?: string;
 	artist?: string;
 	album?: string;
@@ -416,22 +442,22 @@ interface TrackMetadata {
  * Unifies the previously-split `source: string` + `id` search shape and the
  * `{ plugin, externalId }` persisted shape into one API-facing type.
  */
-interface TrackRef {
+export interface TrackRef {
 	/** Source id (= `contributes.sources[].id`, = persisted `Track.source.plugin`). */
 	source: string;
 	/** External id within that source (= persisted `Track.source.externalId`). */
 	id: string;
 }
-interface TrackSource {
+export interface TrackSource {
 	plugin: string;
 	externalId: string;
 	streamUrl?: string;
 }
-type AudioFormat = "mp3" | "m4a" | "flac" | "ogg" | "webm" | "wav";
-type AuthStatus = "authenticated" | "unauthenticated" | "expired" | "checking";
-type PluginCapability = "commands" | "notifications" | "config" | "hooks" | "pluginStore" | "playback" | "playlists" | "library" | "ingest" | "sources" | "net" | "secrets" | "mcp" | "tools" | "themes";
-type ProtocolHandler = (request: ProtocolRequest) => Promise<ProtocolResponse> | ProtocolResponse;
-type SettingsPanelElement = SettingsPanelStatusElement | SettingsPanelButtonElement | SettingsPanelButtonGroupElement | SettingsPanelTextElement | SettingsPanelDividerElement | SettingsPanelProgressElement;
+export type AudioFormat = "mp3" | "m4a" | "flac" | "ogg" | "webm" | "wav";
+export type AuthStatus = "authenticated" | "unauthenticated" | "expired" | "checking";
+export type PluginCapability = "commands" | "notifications" | "config" | "hooks" | "pluginStore" | "playback" | "playlists" | "library" | "ingest" | "sources" | "net" | "secrets" | "mcp" | "tools" | "themes";
+export type ProtocolHandler = (request: ProtocolRequest) => Promise<ProtocolResponse> | ProtocolResponse;
+export type SettingsPanelElement = SettingsPanelStatusElement | SettingsPanelButtonElement | SettingsPanelButtonGroupElement | SettingsPanelTextElement | SettingsPanelDividerElement | SettingsPanelProgressElement;
 interface BaseDocument {
 	_id: string;
 	_rev?: string;
@@ -503,22 +529,4 @@ type NotificationType = "success" | "info" | "warning" | "error";
 type PermissionLevel = "safe" | "moderate" | "sensitive";
 type PlayMode = "sequential" | "shuffle" | "repeat-one" | "repeat-all";
 
-declare class YouTubeMusicPlugin {
-    private context?;
-    private settings;
-    private client;
-    activate(context: PluginContext): Promise<void>;
-    deactivate(): Promise<void>;
-    search(query: string, options?: SearchOptions): Promise<SourceSearchResult[]>;
-    resolveStream(ref: TrackRef): Promise<StreamInfo>;
-    getMetadata(ref: TrackRef): Promise<TrackMetadata | null>;
-    getLyrics(): Promise<null>;
-    private refreshSettings;
-    private createClient;
-    private resolvePlayableStream;
-    private resolveStreamWithYtDlp;
-    private resolveStreamFromFallbackSearch;
-}
-declare const plugin: YouTubeMusicPlugin;
-
-export { YouTubeMusicPlugin, plugin as default };
+export {};

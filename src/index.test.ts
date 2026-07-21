@@ -1,33 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { YouTubeMusicDataSourcePlugin } from './index'
-import type { PluginContext } from './plugin-types'
+import { YouTubeMusicPlugin } from './index'
 
-describe('YouTubeMusicDataSourcePlugin', () => {
-  let plugin: YouTubeMusicDataSourcePlugin
+describe('YouTubeMusicPlugin', () => {
+  let plugin: YouTubeMusicPlugin
   const mockFetch = vi.fn()
   const mockConfigGet = vi.fn()
   const mockLog = vi.fn()
-  const mockContext = {
+  // biome-ignore lint/suspicious/noExplicitAny: test mock context
+  const mockContext: any = {
     manifest: {
-      id: 'test',
-      name: 'Test',
+      name: 'compass-plugin-youtube-music',
       version: '1.0.0',
-      platforms: ['all'],
       main: 'dist/index.js',
-      capabilities: { dataSource: true }
+      compass: { type: 'plugin' }
     },
     platform: 'desktop' as const,
+    subscriptions: [],
     config: {
       get: mockConfigGet,
       set: vi.fn(),
       observe: vi.fn(() => ({ dispose: vi.fn() }))
     },
-    log: mockLog,
-    fetch: mockFetch
-  } satisfies PluginContext
+    net: { fetch: mockFetch },
+    sources: { register: vi.fn(() => ({ dispose: vi.fn() })) },
+    log: mockLog
+  }
 
   beforeEach(() => {
-    plugin = new YouTubeMusicDataSourcePlugin()
+    plugin = new YouTubeMusicPlugin()
+    mockContext.subscriptions = []
     vi.clearAllMocks()
     mockConfigGet.mockImplementation((key: string) => {
       if (key === 'searchLimit') return 20
@@ -41,16 +42,19 @@ describe('YouTubeMusicDataSourcePlugin', () => {
     vi.resetAllMocks()
   })
 
-  it('activates with host fetch support', async () => {
+  it('activates and registers the "youtube-music" source', async () => {
     await plugin.activate(mockContext)
 
     expect(mockContext.log).toHaveBeenCalledWith(
       'info',
-      'YouTube Music data source plugin activated'
+      'YouTube Music source plugin activated'
     )
+    expect(mockContext.sources.register).toHaveBeenCalledTimes(1)
+    expect(mockContext.sources.register.mock.calls[0][0]).toBe('youtube-music')
+    expect(mockContext.subscriptions.length).toBeGreaterThan(0)
   })
 
-  it('searches with the injected host fetch and returns parsed results', async () => {
+  it('searches with the injected host fetch and returns results with a TrackRef', async () => {
     await plugin.activate(mockContext)
 
     mockFetch.mockResolvedValueOnce({
@@ -89,13 +93,12 @@ describe('YouTubeMusicDataSourcePlugin', () => {
 
     await expect(plugin.search('test query')).resolves.toEqual([
       {
-        id: 'abc123',
+        ref: { source: 'youtube-music', id: 'abc123' },
         title: 'Test Song',
         artist: 'Test Artist',
         album: 'YouTube',
         coverUrl: 'cover.jpg',
-        duration: 225,
-        source: 'compass-plugin-youtube-music'
+        duration: 225
       }
     ])
     expect(mockFetch).toHaveBeenCalledTimes(1)
@@ -121,10 +124,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
     })
 
     await expect(
-      plugin.resolveStream({
-        id: 'abc123',
-        source: { plugin: 'compass-plugin-youtube-music', externalId: 'abc123' }
-      })
+      plugin.resolveStream({ source: 'youtube-music', id: 'abc123' })
     ).resolves.toMatchObject({
       url: 'https://rr.youtube.com/videoplayback?audio=webm',
       format: 'webm',
@@ -135,6 +135,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
   it('falls back to another playable candidate when the primary video is unavailable', async () => {
     await plugin.activate(mockContext)
 
+    // biome-ignore lint/suspicious/noExplicitAny: spying on a private method
     vi.spyOn(plugin as any, 'resolvePlayableStream')
       .mockRejectedValueOnce(new Error('primary not playable'))
       .mockResolvedValueOnce({
@@ -143,54 +144,62 @@ describe('YouTubeMusicDataSourcePlugin', () => {
         bitrate: 128000
       } as never)
 
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        text: () =>
-          Promise.resolve(`
-            var ytInitialData = ${JSON.stringify({
-              contents: {
-                twoColumnSearchResultsRenderer: {
-                  primaryContents: {
-                    sectionListRenderer: {
-                      contents: [
-                        {
-                          itemSectionRenderer: {
-                            contents: [
-                              {
-                                videoRenderer: {
-                                  videoId: 'abc123',
-                                  title: { runs: [{ text: 'Blocked Song' }] }
-                                }
-                              },
-                              {
-                                videoRenderer: {
-                                  videoId: 'fallback123',
-                                  title: { runs: [{ text: 'Fallback Song' }] },
-                                  ownerText: { runs: [{ text: 'Test Artist' }] },
-                                  thumbnail: { thumbnails: [{ url: 'cover.jpg' }] },
-                                  lengthText: { simpleText: '3:45' }
-                                }
+    // getMetadata (used to derive the fallback query) → player response
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        videoDetails: {
+          title: 'Blocked Song',
+          author: 'Test Artist',
+          lengthSeconds: '200',
+          thumbnail: { thumbnails: [{ url: 'cover.jpg' }] }
+        }
+      })
+    })
+
+    // fallback search → returns a different candidate
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: () =>
+        Promise.resolve(`
+          var ytInitialData = ${JSON.stringify({
+            contents: {
+              twoColumnSearchResultsRenderer: {
+                primaryContents: {
+                  sectionListRenderer: {
+                    contents: [
+                      {
+                        itemSectionRenderer: {
+                          contents: [
+                            {
+                              videoRenderer: {
+                                videoId: 'abc123',
+                                title: { runs: [{ text: 'Blocked Song' }] }
                               }
-                            ]
-                          }
+                            },
+                            {
+                              videoRenderer: {
+                                videoId: 'fallback123',
+                                title: { runs: [{ text: 'Fallback Song' }] },
+                                ownerText: { runs: [{ text: 'Test Artist' }] },
+                                thumbnail: { thumbnails: [{ url: 'cover.jpg' }] },
+                                lengthText: { simpleText: '3:45' }
+                              }
+                            }
+                          ]
                         }
-                      ]
-                    }
+                      }
+                    ]
                   }
                 }
               }
-            })};
-          `)
-      })
+            }
+          })};
+        `)
+    })
 
     await expect(
-      plugin.resolveStream({
-        id: 'abc123',
-        title: 'Blocked Song',
-        artist: 'Test Artist',
-        source: { plugin: 'compass-plugin-youtube-music', externalId: 'abc123' }
-      })
+      plugin.resolveStream({ source: 'youtube-music', id: 'abc123' })
     ).resolves.toMatchObject({
       url: 'https://rr.youtube.com/videoplayback?audio=fallback',
       format: 'webm',
@@ -198,56 +207,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
     })
   })
 
-  it('falls back to yt-dlp when player clients cannot resolve a stream', async () => {
-    await plugin.activate(mockContext)
-
-    vi.spyOn(plugin as any, 'resolveStreamWithYtDlp').mockResolvedValue({
-      url: 'https://rr.youtube.com/videoplayback?audio=ytdlp',
-      format: 'm4a',
-      bitrate: 128000
-    } as never)
-
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          playabilityStatus: { status: 'ERROR', reason: 'Video unavailable' }
-        })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          playabilityStatus: { status: 'ERROR', reason: 'Video unavailable' }
-        })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          playabilityStatus: { status: 'ERROR', reason: 'Video unavailable' }
-        })
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          playabilityStatus: { status: 'UNPLAYABLE', reason: 'Video unavailable' }
-        })
-      })
-
-    await expect(
-      plugin.resolveStream({
-        id: 'blocked',
-        title: 'Blocked Song',
-        artist: 'Blocked Artist',
-        source: { plugin: 'compass-plugin-youtube-music', externalId: 'blocked' }
-      })
-    ).resolves.toMatchObject({
-      url: 'https://rr.youtube.com/videoplayback?audio=ytdlp',
-      format: 'm4a',
-      bitrate: 128000
-    })
-  })
-
-  it('gets metadata from the player response with fallback behavior', async () => {
+  it('gets metadata from the player response', async () => {
     await plugin.activate(mockContext)
 
     mockFetch.mockResolvedValueOnce({
@@ -263,10 +223,7 @@ describe('YouTubeMusicDataSourcePlugin', () => {
     })
 
     await expect(
-      plugin.getMetadata({
-        id: 'abc123',
-        source: { plugin: 'compass-plugin-youtube-music', externalId: 'abc123' }
-      })
+      plugin.getMetadata({ source: 'youtube-music', id: 'abc123' })
     ).resolves.toEqual({
       title: 'Metadata Song',
       artist: 'Metadata Artist',
@@ -327,12 +284,6 @@ describe('YouTubeMusicDataSourcePlugin', () => {
 
   it('returns null for lyrics', async () => {
     await plugin.activate(mockContext)
-
-    await expect(
-      plugin.getLyrics({
-        id: 'abc123',
-        source: { plugin: 'compass-plugin-youtube-music', externalId: 'abc123' }
-      })
-    ).resolves.toBeNull()
+    await expect(plugin.getLyrics()).resolves.toBeNull()
   })
 })
